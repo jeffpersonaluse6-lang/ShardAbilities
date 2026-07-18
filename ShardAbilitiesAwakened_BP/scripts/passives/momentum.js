@@ -51,6 +51,15 @@ const MAX_BONUS = 0.25; // cap at hit 5+
 /** @type {Map<string, {targetId: string, count: number, lastHitTick: number}>} */
 const comboState = new Map();
 
+/**
+ * Creates a stable composite key for attacker-target pair.
+ * Using entity.id (UUID string) ensures consistency across different
+ * event contexts where Entity object references may differ.
+ */
+function makeComboKey(attackerId, targetId) {
+  return `${attackerId}:${targetId}`;
+}
+
 function currentBonusFor(state) {
   return Math.min(MAX_BONUS, PER_HIT_BONUS * state.count);
 }
@@ -60,18 +69,26 @@ function currentBonusFor(state) {
  * state and gives the player action bar/particle/sound feedback.
  */
 function onHit(attacker, target) {
+  console.log(`[Momentum STAGE 1] onHit() called: attacker=${attacker.id}, target=${target.id}`);
   const now = system.currentTick;
   const existing = comboState.get(attacker.id);
 
+  console.log(`[Momentum STAGE 1] existing state for ${attacker.id}: ${existing ? `targetId=${existing.targetId}, count=${existing.count}` : 'NONE'}`);
+  
   const isSameTarget = existing?.targetId === target.id;
   const withinTimeout = existing ? now - existing.lastHitTick <= COMBO_TIMEOUT_TICKS : false;
   const continuingCombo = isSameTarget && withinTimeout;
+
+  console.log(`[Momentum STAGE 1] isSameTarget=${isSameTarget}, withinTimeout=${withinTimeout}, continuingCombo=${continuingCombo}`);
 
   const count = continuingCombo ? existing.count + 1 : 1;
   const state = { targetId: target.id, count, lastHitTick: now };
   comboState.set(attacker.id, state);
 
+  console.log(`[Momentum STAGE 1] state saved: attacker=${attacker.id}, targetId=${target.id}, count=${count}`);
+  
   const bonusPercent = Math.round(currentBonusFor(state) * 100);
+  console.log(`[Momentum STAGE 1] onHit: count=${count}, bonusPercent=${bonusPercent}%, state set for attacker=${attacker.id}`);
   sendActionBar(attacker, `§6⚔ Combo x${count} (+${bonusPercent}%)`);
   spawnAbilityParticle(attacker, "minecraft:colored_flame_particle", undefined, {
     red: 1.0,
@@ -87,22 +104,34 @@ function onHit(attacker, target) {
  * — a combo built against one enemy doesn't apply to a hit on another.
  */
 function getMomentumBonus(attacker, target) {
+  console.log(`[Momentum STAGE 2] getMomentumBonus() called: attacker=${attacker?.id}, target=${target?.id}`);
+  if (!attacker || !target) {
+    console.log(`[Momentum STAGE 2] RETURNING bonus=0 (null attacker or target)`);
+    return 0;
+  }
   const state = comboState.get(attacker.id);
-  if (!state) {
-    console.log(`[Momentum DEBUG] getMomentumBonus: NO STATE for attacker ${attacker.id}`);
+  console.log(`[Momentum STAGE 2] comboState has ${comboState.size} entries, keys: ${Array.from(comboState.keys()).join(', ')}`);
+  if (state) {
+    console.log(`[Momentum STAGE 2] state found: targetId=${state.targetId}, count=${state.count}, lastHitTick=${state.lastHitTick}`);
+  } else {
+    console.log(`[Momentum STAGE 2] NO STATE for attacker ${attacker.id}`);
+    console.log(`[Momentum STAGE 2] RETURNING bonus=0 (no state)`);
     return 0;
   }
   if (state.targetId !== target.id) {
-    console.log(`[Momentum DEBUG] getMomentumBonus: TARGET MISMATCH state.targetId=${state.targetId} vs target.id=${target.id}`);
+    console.log(`[Momentum STAGE 2] TARGET MISMATCH state.targetId=${state.targetId} vs target.id=${target.id}`);
+    console.log(`[Momentum STAGE 2] RETURNING bonus=0 (target mismatch)`);
     return 0;
   }
   const elapsed = system.currentTick - state.lastHitTick;
+  console.log(`[Momentum STAGE 2] elapsed=${elapsed}, COMBO_TIMEOUT_TICKS=${COMBO_TIMEOUT_TICKS}`);
   if (elapsed > COMBO_TIMEOUT_TICKS) {
-    console.log(`[Momentum DEBUG] getMomentumBonus: TIMEOUT elapsed=${elapsed} > ${COMBO_TIMEOUT_TICKS}`);
+    console.log(`[Momentum STAGE 2] TIMEOUT elapsed=${elapsed} > ${COMBO_TIMEOUT_TICKS}`);
+    console.log(`[Momentum STAGE 2] RETURNING bonus=0 (timeout)`);
     return 0;
   }
   const bonus = currentBonusFor(state);
-  console.log(`[Momentum DEBUG] getMomentumBonus: RETURNING bonus=${bonus} (count=${state.count}, target=${target.id})`);
+  console.log(`[Momentum STAGE 2] RETURNING bonus=${bonus} (count=${state.count}, target=${target.id})`);
   return bonus;
 }
 
