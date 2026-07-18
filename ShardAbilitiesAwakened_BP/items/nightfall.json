@@ -1,0 +1,20 @@
+{
+  "format_version": "1.21.80",
+  "minecraft:item": {
+    "description": {
+      "identifier": "invfx:nightfall",
+      "menu_category": {
+        "category": "equipment",
+        "group": "minecraft:itemGroup.name.sword"
+      }
+    },
+    "components": {
+      "minecraft:icon": "nightfall",
+      "minecraft:max_stack_size": 1,
+      "minecraft:display_name": {
+        "value": "item.invfx:nightfall"
+      },
+      "minecraft:foil": true
+    }
+  }
+}

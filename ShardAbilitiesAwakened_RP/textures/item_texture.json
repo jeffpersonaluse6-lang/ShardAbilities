@@ -1,0 +1,60 @@
+{
+  "resource_pack_name": "shard_abilities",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "void_shard": {
+      "textures": "textures/items/void_shard"
+    },
+    "rage_shard": {
+      "textures": "textures/items/rage_shard"
+    },
+    "ender_shard": {
+      "textures": "textures/items/ender_shard"
+    },
+    "shadow_shard": {
+      "textures": "textures/items/shadow_shard"
+    },
+    "sky_shard": {
+      "textures": "textures/items/sky_shard"
+    },
+    "vision_shard": {
+      "textures": "textures/items/vision_shard"
+    },
+    "fire_shard": {
+      "textures": "textures/items/fire_shard"
+    },
+    "water_shard": {
+      "textures": "textures/items/water_shard"
+    },
+    "lightning_shard": {
+      "textures": "textures/items/lightning_shard"
+    },
+    "ice_shard": {
+      "textures": "textures/items/ice_shard"
+    },
+    "blood": {
+      "textures": "textures/items/blood"
+    },
+    "cataclysm": {
+      "textures": "textures/items/cataclysm"
+    },
+    "nightfall": {
+      "textures": "textures/items/nightfall"
+    },
+    "eclipse": {
+      "textures": "textures/items/eclipse"
+    },
+    "soul": {
+      "textures": "textures/items/soul"
+    },
+    "abyss": {
+      "textures": "textures/items/abyss"
+    },
+    "chaos": {
+      "textures": "textures/items/chaos"
+    },
+    "momentum": {
+      "textures": "textures/items/momentum"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "format_version": "1.14.0",
+  "sound_definitions": {
+    "shard.water.activate": {
+      "category": "player",
+      "sounds": ["sounds/shard/water_activate"]
+    },
+    "shard.lightning.activate": {
+      "category": "player",
+      "sounds": ["sounds/shard/lightning_activate"]
+    },
+    "shard.ice.activate": {
+      "category": "player",
+      "sounds": ["sounds/shard/ice_activate"]
+    }
+  }
+}
