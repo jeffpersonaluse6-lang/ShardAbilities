@@ -28,6 +28,9 @@ if (DEBUG_MODE) {
 
     const targetName = hurtEntity.typeId.replace("minecraft:", "");
     attacker.sendMessage(`§e[debug] ${damage} dmg -> ${targetName}`);
+    
+    // Also log to console for server-side visibility
+    console.log(`[debug] ${damage} dmg -> ${targetName}`);
   });
 
   console.log("[ShardAbilities: Awakened] DEBUG_MODE is ON — damage readout active. Turn off before deploying to a live server.");

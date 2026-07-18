@@ -109,6 +109,8 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
   const target = event.hitEntity;
   if (!attacker || attacker.typeId !== "minecraft:player" || !target) return;
 
+  console.log(`[entityHitEntity] attacker=${attacker.id}, target=${target.id}`);
+
   // Soul's kill-attribution fallback needs this recorded unconditionally,
   // regardless of which passives either player owns.
   if (target.typeId === "minecraft:player" && target.id !== attacker.id) {
@@ -120,8 +122,12 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
   // ONE inventory scan for this attacker, checked against every registered
   // hit passive — not one scan per passive.
   const owned = getOwnedPassiveIds(attacker);
+  console.log(`[entityHitEntity] owned passives: ${Array.from(owned).join(', ')}`);
   for (const [passiveId, handler] of hitPassives) {
-    if (owned.has(passiveId)) handler(attacker, target);
+    if (owned.has(passiveId)) {
+      console.log(`[entityHitEntity] calling handler for '${passiveId}'`);
+      handler(attacker, target);
+    }
   }
 });
 
@@ -172,48 +178,80 @@ system.runInterval(() => {
 // --- entityHurt: the single damage-bonus resolution point -----------------
 
 world.afterEvents.entityHurt.subscribe((event) => {
-  if (damageBonusProviders.size === 0) return;
+  console.log(`[combatManager STAGE 3] entityHurt event fired`);
+  if (damageBonusProviders.size === 0) {
+    console.log(`[combatManager STAGE 3] NO damageBonusProviders registered`);
+    return;
+  }
+  console.log(`[combatManager STAGE 3] ${damageBonusProviders.size} providers registered`);
 
   const { damageSource, hurtEntity, damage } = event;
+  console.log(`[combatManager STAGE 3] damage=${damage}, hurtEntity=${hurtEntity.id}`);
 
   // This hit IS our own deferred top-up landing — do not compute another
   // bonus on top of a bonus. Without this guard, the "minimum +1 damage"
   // floor below would make the top-up recurse forever instead of stopping.
-  if (pendingBonusTargets.has(hurtEntity.id)) return;
+  if (pendingBonusTargets.has(hurtEntity.id)) {
+    console.log(`[combatManager STAGE 3] SKIPPED - pendingBonusTargets has ${hurtEntity.id}`);
+    return;
+  }
 
   const attacker = damageSource.damagingEntity;
-  if (!attacker || attacker.typeId !== "minecraft:player") return;
-  if (damageSource.cause !== EntityDamageCause.entityAttack) return;
+  console.log(`[combatManager STAGE 3] attacker=${attacker?.id}, type=${attacker?.typeId}`);
+  if (!attacker || attacker.typeId !== "minecraft:player") {
+    console.log(`[combatManager STAGE 3] SKIPPED - attacker not player`);
+    return;
+  }
+  console.log(`[combatManager STAGE 3] cause=${damageSource.cause}, expected=${EntityDamageCause.entityAttack}`);
+  if (damageSource.cause !== EntityDamageCause.entityAttack) {
+    console.log(`[combatManager STAGE 3] SKIPPED - wrong damage cause`);
+    return;
+  }
 
   let bestBonus = 0;
-  for (const provider of damageBonusProviders.values()) {
+  console.log(`[combatManager STAGE 3] iterating ${damageBonusProviders.size} providers`);
+  for (const [sourceId, provider] of damageBonusProviders) {
+    console.log(`[combatManager STAGE 3] calling provider '${sourceId}' with attacker=${attacker.id}, hurtEntity=${hurtEntity.id}`);
     const bonus = provider(attacker, hurtEntity, damage);
-    console.log(`[combatManager DEBUG] entityHurt: provider returned bonus=${bonus}, bestBonus was ${bestBonus}`);
+    console.log(`[combatManager STAGE 3] provider '${sourceId}' returned bonus=${bonus}, bestBonus was ${bestBonus}`);
     if (bonus > bestBonus) bestBonus = bonus;
   }
-  console.log(`[combatManager DEBUG] entityHurt: final bestBonus=${bestBonus}, damage=${damage}`);
-  if (bestBonus <= 0) return;
+  console.log(`[combatManager STAGE 3] final bestBonus=${bestBonus}, damage=${damage}`);
+  if (bestBonus <= 0) {
+    console.log(`[combatManager STAGE 3] NO BONUS APPLIED (bestBonus <= 0)`);
+    return;
+  }
 
   // Guarantee at least +1 whenever any bonus is active — see rage.js /
   // this file's history for why rounding alone left small bonuses
   // (particularly Momentum's early combo stacks) completely invisible.
   const bonusDamage = Math.max(1, Math.round(damage * bestBonus));
-  console.log(`[combatManager DEBUG] entityHurt: bonusDamage=${bonusDamage} (base=${damage}, bestBonus=${bestBonus})`);
+  console.log(`[combatManager STAGE 4] baseDamage=${damage}, bestBonus=${bestBonus}, bonusDamage=${bonusDamage}`);
 
   // Deferred one tick to avoid Bedrock's execution-context restrictions on
   // mutating combat state from inside the event that's still resolving it.
   pendingBonusTargets.add(hurtEntity.id);
+  
+  // Read health before applying damage (Stage 7 prep)
+  const healthBefore = hurtEntity.getComponent("minecraft:health")?.currentValue;
+  console.log(`[combatManager STAGE 5] health before=${healthBefore}, calling applyDamage(${bonusDamage})`);
+  
   system.run(() => {
     try {
-      console.log(`[combatManager DEBUG] applyDamage: applying ${bonusDamage} to ${hurtEntity.id}`);
       hurtEntity.applyDamage(bonusDamage, {
         cause: EntityDamageCause.entityAttack,
         damagingEntity: attacker,
       });
-    } catch {
+      console.log(`[combatManager STAGE 6] applyDamage SUCCESS applied ${bonusDamage} to ${hurtEntity.id}`);
+    } catch (e) {
       // Target likely died/despawned in the 1-tick gap — safe to skip.
+      console.log(`[combatManager STAGE 6] applyDamage FAILED - error: ${e.message}`);
     } finally {
       pendingBonusTargets.delete(hurtEntity.id);
+      
+      // Stage 7: Read health after applying damage
+      const healthAfter = hurtEntity.getComponent("minecraft:health")?.currentValue;
+      console.log(`[combatManager STAGE 7] health after=${healthAfter}, health before was=${healthBefore}, delta=${healthBefore !== undefined && healthAfter !== undefined ? (healthBefore - healthAfter) : 'unknown'}`);
     }
   });
 });
