@@ -88,10 +88,22 @@ function onHit(attacker, target) {
  */
 function getMomentumBonus(attacker, target) {
   const state = comboState.get(attacker.id);
-  if (!state) return 0;
-  if (state.targetId !== target.id) return 0;
-  if (system.currentTick - state.lastHitTick > COMBO_TIMEOUT_TICKS) return 0;
-  return currentBonusFor(state);
+  if (!state) {
+    console.log(`[Momentum DEBUG] getMomentumBonus: NO STATE for attacker ${attacker.id}`);
+    return 0;
+  }
+  if (state.targetId !== target.id) {
+    console.log(`[Momentum DEBUG] getMomentumBonus: TARGET MISMATCH state.targetId=${state.targetId} vs target.id=${target.id}`);
+    return 0;
+  }
+  const elapsed = system.currentTick - state.lastHitTick;
+  if (elapsed > COMBO_TIMEOUT_TICKS) {
+    console.log(`[Momentum DEBUG] getMomentumBonus: TIMEOUT elapsed=${elapsed} > ${COMBO_TIMEOUT_TICKS}`);
+    return 0;
+  }
+  const bonus = currentBonusFor(state);
+  console.log(`[Momentum DEBUG] getMomentumBonus: RETURNING bonus=${bonus} (count=${state.count}, target=${target.id})`);
+  return bonus;
 }
 
 registerHitPassive(PASSIVE_ITEMS.momentum.id, onHit);

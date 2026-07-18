@@ -188,20 +188,24 @@ world.afterEvents.entityHurt.subscribe((event) => {
   let bestBonus = 0;
   for (const provider of damageBonusProviders.values()) {
     const bonus = provider(attacker, hurtEntity, damage);
+    console.log(`[combatManager DEBUG] entityHurt: provider returned bonus=${bonus}, bestBonus was ${bestBonus}`);
     if (bonus > bestBonus) bestBonus = bonus;
   }
+  console.log(`[combatManager DEBUG] entityHurt: final bestBonus=${bestBonus}, damage=${damage}`);
   if (bestBonus <= 0) return;
 
   // Guarantee at least +1 whenever any bonus is active — see rage.js /
   // this file's history for why rounding alone left small bonuses
   // (particularly Momentum's early combo stacks) completely invisible.
   const bonusDamage = Math.max(1, Math.round(damage * bestBonus));
+  console.log(`[combatManager DEBUG] entityHurt: bonusDamage=${bonusDamage} (base=${damage}, bestBonus=${bestBonus})`);
 
   // Deferred one tick to avoid Bedrock's execution-context restrictions on
   // mutating combat state from inside the event that's still resolving it.
   pendingBonusTargets.add(hurtEntity.id);
   system.run(() => {
     try {
+      console.log(`[combatManager DEBUG] applyDamage: applying ${bonusDamage} to ${hurtEntity.id}`);
       hurtEntity.applyDamage(bonusDamage, {
         cause: EntityDamageCause.entityAttack,
         damagingEntity: attacker,
