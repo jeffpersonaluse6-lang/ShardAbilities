@@ -2,8 +2,11 @@
  * void.js
  *
  * Void Shard — "Void Form"
- *   - Strength I, Speed II, Resistance I for 8 seconds
- *   - Instant ~10 block dash in the direction the player is facing
+ *   - Speed II, Resistance I for 8 seconds
+ *   - NEW: Suction effect pulls all nearby enemies/players (within ~15 blocks)
+ *     toward the caster
+ *   - Strength level scales with number of enemies pulled:
+ *     1 enemy = Strength I, 2 enemies = Strength II, etc.
  *   - Cooldown (180s) and activation flow are handled entirely by
  *     shardManager — this file ONLY contains what makes Void unique.
  *
@@ -11,6 +14,7 @@
  * one default export-free module that calls registerAbility() once.
  */
 
+import { system } from "@minecraft/server";
 import { registerAbility } from "../managers/shardManager.js";
 import {
   sendActionBar,
@@ -21,16 +25,22 @@ import {
 import { SHARDS } from "../config.js";
 
 const EFFECT_DURATION_TICKS = 8 * 20; // 8 seconds
-const DASH_HORIZONTAL_STRENGTH = 2.6; // Tuned so the resulting travel is ~10 blocks
-const DASH_VERTICAL_STRENGTH = 0.15; // Small lift so the dash doesn't catch on floor friction
+const SUCTION_RADIUS = 15; // Pull enemies within this radius
+const SUCTION_PULL_STRENGTH = 1.5; // Knockback force toward caster
+const TICKS_PER_PULL = 4; // How often to apply pull (in ticks)
+const TOTAL_PULL_DURATION_TICKS = 2 * 20; // 2 seconds of pulling
 
 /**
  * Applies the Void Form status effects.
+ * Strength amplifier scales with number of enemies pulled.
  * @param {import("@minecraft/server").Player} player
+ * @param {number} enemiesPulled - Number of enemies successfully pulled
  */
-function applyVoidEffects(player) {
+function applyVoidEffects(player, enemiesPulled) {
+  // Strength scales with enemies pulled: 1 enemy = level 1, 2 enemies = level 2, etc.
+  const strengthAmplifier = Math.max(0, enemiesPulled - 1);
   player.addEffect("strength", EFFECT_DURATION_TICKS, {
-    amplifier: 0,
+    amplifier: strengthAmplifier,
     showParticles: true,
   });
   player.addEffect("speed", EFFECT_DURATION_TICKS, {
@@ -44,29 +54,41 @@ function applyVoidEffects(player) {
 }
 
 /**
- * Dashes the player forward using their current view direction.
- * We only use the horizontal (x, z) component of the view direction so
- * looking up or down doesn't turn the dash into an unintended launch or
- * slam into the ground.
- * @param {import("@minecraft/server").Player} player
+ * Applies suction effect to pull all nearby entities toward the caster.
+ * Returns the count of entities pulled.
+ * @param {import("@minecraft/server").Player} caster
+ * @returns {number} - Number of entities pulled
  */
-function dashForward(player) {
-  const view = player.getViewDirection();
+function applySuctionEffect(caster) {
+  const casterLocation = caster.location;
+  let pulledCount = 0;
 
-  // Flatten to horizontal-only and re-normalize, otherwise looking
-  // steeply up/down would shrink the horizontal push unpredictably.
-  const horizontalLength = Math.sqrt(view.x * view.x + view.z * view.z);
-  if (horizontalLength === 0) return; // Looking perfectly straight up/down — skip the dash.
+  const nearbyEntities = caster.dimension.getEntities({
+    location: casterLocation,
+    maxDistance: SUCTION_RADIUS,
+  });
 
-  const direction = {
-    x: view.x / horizontalLength,
-    z: view.z / horizontalLength,
-  };
+  for (const entity of nearbyEntities) {
+    if (entity.id === caster.id) continue;
+    
+    // Calculate direction from entity to caster
+    const dx = casterLocation.x - entity.location.x;
+    const dz = casterLocation.z - entity.location.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    
+    if (distance === 0) continue;
 
-  player.applyKnockback(
-    { x: direction.x * DASH_HORIZONTAL_STRENGTH, z: direction.z * DASH_HORIZONTAL_STRENGTH },
-    DASH_VERTICAL_STRENGTH
-  );
+    // Normalize and apply knockback toward caster
+    const direction = {
+      x: (dx / distance) * SUCTION_PULL_STRENGTH,
+      z: (dz / distance) * SUCTION_PULL_STRENGTH,
+    };
+
+    entity.applyKnockback(direction, 0.1);
+    pulledCount++;
+  }
+
+  return pulledCount;
 }
 
 /**
@@ -93,11 +115,15 @@ function spawnVoidBurst(player) {
  * @param {import("@minecraft/server").Player} player
  */
 function executeVoidForm(player) {
-  applyVoidEffects(player);
-  dashForward(player);
+  // Apply suction effect to pull all nearby enemies toward the caster
+  const enemiesPulled = applySuctionEffect(player);
+  
+  // Apply effects with Strength scaled based on number of enemies pulled
+  applyVoidEffects(player, enemiesPulled);
+  
   spawnVoidBurst(player);
   playAbilitySound(player, "mob.endermen.portal", { pitch: 0.8 });
-  sendActionBar(player, "§5Void Form activated!");
+  sendActionBar(player, `§5Void Form activated! Pulled ${enemiesPulled} enemy(s).`);
 }
 
 registerAbility(SHARDS.void.id, executeVoidForm);
