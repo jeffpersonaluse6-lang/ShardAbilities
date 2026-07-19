@@ -32,27 +32,6 @@
     "frost_shard": {
       "textures": "textures/items/frost_shard"
     },
-    "blood": {
-      "textures": "textures/items/blood"
-    },
-    "cataclysm": {
-      "textures": "textures/items/cataclysm"
-    },
-    "nightfall": {
-      "textures": "textures/items/nightfall"
-    },
-    "eclipse": {
-      "textures": "textures/items/eclipse"
-    },
-    "soul": {
-      "textures": "textures/items/soul"
-    },
-    "abyss": {
-      "textures": "textures/items/abyss"
-    },
-    "chaos": {
-      "textures": "textures/items/chaos"
-    },
     "momentum": {
       "textures": "textures/items/momentum"
     }

@@ -23,7 +23,7 @@
 
 import { system, BlockPermutation } from "@minecraft/server";
 import { registerAbility } from "../managers/shardManager.js";
-import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.js";
+import { sendActionBar, playAbilitySound, spawnAbilityParticle, spawnParticleRing } from "../utils.js";
 import { SHARDS } from "../config.js";
 
 const IGNITE_RADIUS = 6;
@@ -102,6 +102,11 @@ function executeEmberBurst(caster) {
 
   placeLavaFireRing(caster.dimension, caster.location);
 
+  spawnParticleRing(caster.dimension, caster.location, "minecraft:colored_flame_particle", RING_RADIUS, 12, {
+    red: 0.95,
+    green: 0.35,
+    blue: 0.15,
+  });
   spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, {
     red: 0.95,
     green: 0.35,

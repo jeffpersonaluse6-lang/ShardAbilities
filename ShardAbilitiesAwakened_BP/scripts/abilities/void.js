@@ -16,6 +16,7 @@ import {
   sendActionBar,
   playAbilitySound,
   spawnAbilityParticle,
+  spawnParticleRing,
 } from "../utils.js";
 import { SHARDS } from "../config.js";
 
@@ -74,6 +75,11 @@ function dashForward(player) {
  * @param {import("@minecraft/server").Player} player
  */
 function spawnVoidBurst(player) {
+  spawnParticleRing(player.dimension, player.location, "minecraft:colored_flame_particle", 2.5, 12, {
+    red: 0.6,
+    green: 0.0,
+    blue: 0.8,
+  });
   spawnAbilityParticle(player, "minecraft:colored_flame_particle", undefined, {
     red: 0.6,
     green: 0.0,

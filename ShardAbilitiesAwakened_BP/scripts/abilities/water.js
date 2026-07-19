@@ -18,7 +18,7 @@
  */
 
 import { registerAbility } from "../managers/shardManager.js";
-import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.js";
+import { sendActionBar, playAbilitySound, spawnParticleRing } from "../utils.js";
 import { SHARDS } from "../config.js";
 
 const WAVE_RADIUS = 5;
@@ -63,7 +63,7 @@ function executeTidalWave(caster) {
     pushedCount++;
   }
 
-  spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, {
+  spawnParticleRing(caster.dimension, caster.location, "minecraft:colored_flame_particle", WAVE_RADIUS, 16, {
     red: 0.25,
     green: 0.45,
     blue: 0.95,

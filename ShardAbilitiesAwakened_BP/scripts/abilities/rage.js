@@ -6,21 +6,14 @@
  *   - When the buff ends, the backlash hits: Poison
  *   - Cooldown (120s) handled by shardManager, as always.
  *
- * CHANGED AGAIN: this used to apply a scripted +35% damage bonus through
- * combatManager's shared entityHurt listener (comparing against Momentum's
- * combo bonus, taking whichever was larger). That mechanism turned out to
- * be fragile in a way that had nothing to do with our code being wrong —
- * Minecraft's own post-hit invulnerability window was silently absorbing
- * bonus damage smaller than the hit that triggered it. Native status
- * effects don't have that problem: they're applied directly by the
- * engine's own effect system, not routed through the damage pipeline at
- * all, so there's nothing for invulnerability frames to interfere with.
- *
- * This also means Rage no longer registers a damage-bonus provider with
- * combatManager — Momentum is the only one left using that system now.
- * That's fine; the provider system was built to let MULTIPLE sources
- * resolve fairly against each other, and it still does exactly that for
- * however many sources actually use it, one or several.
+ * Uses native status effects rather than a scripted damage-percentage
+ * bonus. An earlier version routed a +35% bonus through a shared
+ * entityHurt listener — that turned out to be fragile for a Minecraft
+ * engine reason, not a code reason: post-hit invulnerability frames
+ * silently absorb bonus damage smaller than the hit that triggered it.
+ * Native effects don't have that problem since they're applied directly
+ * by the engine's own effect system, never routed through the damage
+ * pipeline at all.
  */
 
 import { system } from "@minecraft/server";
@@ -29,6 +22,7 @@ import {
   sendActionBar,
   playAbilitySound,
   spawnAbilityParticle,
+  spawnParticleRing,
 } from "../utils.js";
 import { SHARDS } from "../config.js";
 
@@ -52,6 +46,11 @@ function executeBerserk(player) {
     showParticles: true,
   });
 
+  spawnParticleRing(player.dimension, player.location, "minecraft:colored_flame_particle", 2, 10, {
+    red: 0.95,
+    green: 0.35,
+    blue: 0.15,
+  });
   spawnAbilityParticle(player, "minecraft:colored_flame_particle", undefined, {
     red: 0.95,
     green: 0.35,

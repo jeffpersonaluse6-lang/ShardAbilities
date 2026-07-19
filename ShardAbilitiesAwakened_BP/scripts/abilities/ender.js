@@ -36,6 +36,7 @@ import {
   sendActionBar,
   playAbilitySound,
   spawnAbilityParticle,
+  spawnParticleTrail,
 } from "../utils.js";
 import { SHARDS } from "../config.js";
 
@@ -114,6 +115,7 @@ function findSafeBlinkLocation(player) {
 }
 
 function executeBlink(player) {
+  const origin = player.location;
   const destination = findSafeBlinkLocation(player);
 
   // Particle/sound at the origin first, so the "departure" reads clearly
@@ -124,6 +126,16 @@ function executeBlink(player) {
     blue: 0.25,
   });
   playAbilitySound(player, "mob.endermen.portal", { pitch: 1.4 });
+
+  // A trail connecting exactly where they started to exactly where they're
+  // about to land — this reads as an actual blink path, not two
+  // disconnected effects, and its length automatically matches however
+  // far the safe-distance check actually let them travel.
+  spawnParticleTrail(player.dimension, origin, destination, "minecraft:colored_flame_particle", 12, {
+    red: 0.2,
+    green: 0.9,
+    blue: 0.25,
+  });
 
   player.teleport(destination, { keepVelocity: false });
 

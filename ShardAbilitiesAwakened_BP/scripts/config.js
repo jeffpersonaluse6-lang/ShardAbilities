@@ -20,7 +20,7 @@ export const NAMESPACE = "shard";
  * message on every single player-caused hit, which is real per-event
  * overhead this addon otherwise goes out of its way to avoid.
  */
-export const DEBUG_MODE = false;
+export const DEBUG_MODE = true;
 
 /**
  * @typedef {Object} ShardDefinition
@@ -95,31 +95,6 @@ export const SHARDS = {
 };
 
 /**
- * PASSIVE_ITEMS — items that grant an ability just by being carried in
- * inventory, no activation required. Structurally simpler than SHARDS
- * (no cooldown, no itemId->ability dispatch on use) but registered the
- * same way: one entry here, one file in scripts/passives/.
- */
-export const PASSIVE_ITEMS = {
-  blood: { id: "blood", itemId: "invfx:blood", displayName: "Blood" },
-  cataclysm: { id: "cataclysm", itemId: "invfx:cataclysm", displayName: "Cataclysm" },
-  nightfall: { id: "nightfall", itemId: "invfx:nightfall", displayName: "Nightfall" },
-  eclipse: { id: "eclipse", itemId: "invfx:eclipse", displayName: "Eclipse" },
-  soul: { id: "soul", itemId: "invfx:soul", displayName: "Soul" },
-  abyss: { id: "abyss", itemId: "invfx:abyss", displayName: "Abyss" },
-  chaos: { id: "chaos", itemId: "invfx:chaos", displayName: "Chaos" },
-  momentum: { id: "momentum", itemId: "invfx:momentum", displayName: "Momentum" },
-};
-
-/**
- * Damage-bonus resolution: when multiple sources of bonus melee damage are
- * active on the same player (Rage's Berserk, Momentum's combo), only the
- * LARGER bonus applies rather than stacking. This constant lives here,
- * not in combatManager, so tuning it doesn't require touching logic code.
- */
-export const DAMAGE_BONUS_RESOLUTION = "max"; // vs. "additive" — documents the design choice in one place
-
-/**
  * Reverse lookup table: itemId -> ShardDefinition.
  * Built once at load time so the activation listener can find the correct
  * shard in O(1) instead of looping SHARDS on every single item use.
@@ -131,10 +106,15 @@ export const ITEM_ID_TO_SHARD = Object.freeze(
 );
 
 /**
- * Reverse lookup table: itemId -> PassiveItemDefinition.
- * inventoryManager uses this to translate a raw inventory scan into known
- * passive ids without any per-passive-file hardcoding.
+ * PASSIVE_ITEMS — items that grant an ability just by being carried in
+ * inventory, no activation required. Currently just Momentum; the other
+ * passives from the fused Inventory Effect Items addon (Blood, Cataclysm,
+ * Nightfall, Eclipse, Soul, Abyss, Chaos) were removed per request.
  */
+export const PASSIVE_ITEMS = {
+  momentum: { id: "momentum", itemId: "invfx:momentum", displayName: "Momentum" },
+};
+
 export const ITEM_ID_TO_PASSIVE = Object.freeze(
   Object.fromEntries(
     Object.values(PASSIVE_ITEMS).map((item) => [item.itemId, item.id])

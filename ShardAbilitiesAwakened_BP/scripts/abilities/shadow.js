@@ -24,6 +24,7 @@ import {
   sendActionBar,
   playAbilitySound,
   spawnAbilityParticle,
+  spawnParticleRing,
 } from "../utils.js";
 import { SHARDS } from "../config.js";
 
@@ -40,6 +41,11 @@ function executeShadowCloak(player) {
   const originalNameTag = player.nameTag;
   player.nameTag = "";
 
+  spawnParticleRing(player.dimension, player.location, "minecraft:colored_flame_particle", 1.5, 10, {
+    red: 0.1,
+    green: 0.1,
+    blue: 0.12,
+  });
   spawnAbilityParticle(player, "minecraft:colored_flame_particle", undefined, {
     red: 0.1,
     green: 0.1,

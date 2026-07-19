@@ -17,11 +17,12 @@
  */
 
 import { registerAbility } from "../managers/shardManager.js";
-import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.js";
+import { sendActionBar, playAbilitySound, spawnAbilityParticle, spawnParticleRing } from "../utils.js";
 import { SHARDS } from "../config.js";
 
 const HIGHLIGHT_RADIUS = 30;
 const HIGHLIGHT_DURATION_TICKS = 8 * 20; // 8 seconds
+const VISION_COLOR = { red: 0.9, green: 0.7, blue: 0.1 };
 
 /**
  * @param {import("@minecraft/server").Player} caster
@@ -40,14 +41,13 @@ function executeHuntersSight(caster) {
       amplifier: 0,
       showParticles: false,
     });
+    // A small ring at each revealed target's own feet — marks exactly who
+    // got caught by this cast, distinct from the caster's own burst below.
+    spawnParticleRing(target.dimension, target.location, "minecraft:colored_flame_particle", 1, 8, VISION_COLOR);
     highlightedCount++;
   }
 
-  spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, {
-    red: 0.9,
-    green: 0.7,
-    blue: 0.1,
-  });
+  spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, VISION_COLOR);
   playAbilitySound(caster, "mob.enderman.stare", { pitch: 1.3 });
   sendActionBar(
     caster,

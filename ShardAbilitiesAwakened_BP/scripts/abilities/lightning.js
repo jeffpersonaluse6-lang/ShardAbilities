@@ -24,7 +24,7 @@
 
 import { system } from "@minecraft/server";
 import { registerAbility } from "../managers/shardManager.js";
-import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.js";
+import { sendActionBar, playAbilitySound, spawnAbilityParticle, spawnParticleRing } from "../utils.js";
 import { SHARDS } from "../config.js";
 
 const STRIKE_RANGE = 20;
@@ -113,6 +113,11 @@ function executeThunderclap(caster) {
     showParticles: true,
   });
 
+  spawnParticleRing(caster.dimension, strikeLocation, "minecraft:colored_flame_particle", RING_RADIUS, 12, {
+    red: 0.95,
+    green: 0.95,
+    blue: 0.2,
+  });
   spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, {
     red: 0.95,
     green: 0.95,

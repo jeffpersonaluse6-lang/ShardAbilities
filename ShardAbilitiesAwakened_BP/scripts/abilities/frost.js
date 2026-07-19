@@ -24,12 +24,13 @@
 
 import { system } from "@minecraft/server";
 import { registerAbility } from "../managers/shardManager.js";
-import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.js";
+import { sendActionBar, playAbilitySound, spawnAbilityParticle, spawnParticleRing } from "../utils.js";
 import { SHARDS } from "../config.js";
 
 const FROST_RADIUS = 6;
 const FREEZE_DURATION_TICKS = 5 * 20; // 5 seconds
 const SLOWNESS_AMPLIFIER = 6; // extra visual/icon layer on top of the true freeze
+const FROST_COLOR = { red: 0.4, green: 0.85, blue: 0.95 };
 
 /** @type {Map<string, number>} entityId -> active runInterval id */
 const activeFreezeIntervals = new Map();
@@ -50,6 +51,8 @@ function freezeEntity(entity) {
   const frozenLocation = entity.location;
   const frozenRotation = entity.getRotation();
   let ticksRemaining = FREEZE_DURATION_TICKS;
+
+  spawnParticleRing(entity.dimension, frozenLocation, "minecraft:colored_flame_particle", 0.8, 6, FROST_COLOR);
 
   const intervalId = system.runInterval(() => {
     ticksRemaining--;
@@ -92,11 +95,8 @@ function executeFrostbite(caster) {
     frozenCount++;
   }
 
-  spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, {
-    red: 0.4,
-    green: 0.85,
-    blue: 0.95,
-  });
+  spawnParticleRing(caster.dimension, caster.location, "minecraft:colored_flame_particle", FROST_RADIUS, 16, FROST_COLOR);
+  spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, FROST_COLOR);
   playAbilitySound(caster, "shard.ice.activate", { pitch: 1.0 });
   sendActionBar(
     caster,

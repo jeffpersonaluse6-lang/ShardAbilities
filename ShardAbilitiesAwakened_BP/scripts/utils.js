@@ -32,6 +32,19 @@ export function playAbilitySound(player, soundId, options = {}) {
 }
 
 /**
+ * Builds a MolangVariableMap for particles that need a "variable.color"
+ * RGB input (like colored_flame_particle). Shared by every particle
+ * helper below instead of each one building this map inline.
+ * @param {{red: number, green: number, blue: number}} color
+ * @returns {import("@minecraft/server").MolangVariableMap}
+ */
+function buildColorMolang(color) {
+  const variables = new MolangVariableMap();
+  variables.setColorRGB("variable.color", color);
+  return variables;
+}
+
+/**
  * Spawns a particle effect at (or relative to) a player's location.
  * @param {import("@minecraft/server").Player} player
  * @param {string} particleId
@@ -43,13 +56,66 @@ export function spawnAbilityParticle(player, particleId, location, color) {
   const particleLocation = location ?? player.location;
 
   if (color) {
-    const variables = new MolangVariableMap();
-    variables.setColorRGB("variable.color", color);
-    dimension.spawnParticle(particleId, particleLocation, variables);
+    dimension.spawnParticle(particleId, particleLocation, buildColorMolang(color));
     return;
   }
 
   dimension.spawnParticle("minecraft:villager_happy", particleLocation);
+}
+
+/**
+ * Spawns particles arranged in a circle around a center point — a ring
+ * effect, rather than a single-point burst. Shared here so every ability
+ * that wants a ring uses the same math instead of each reimplementing it.
+ * @param {import("@minecraft/server").Dimension} dimension
+ * @param {import("@minecraft/server").Vector3} center
+ * @param {string} particleId
+ * @param {number} radius
+ * @param {number} count
+ * @param {{red:number, green:number, blue:number}} [color]
+ */
+export function spawnParticleRing(dimension, center, particleId, radius, count, color) {
+  const molang = color ? buildColorMolang(color) : undefined;
+  for (let i = 0; i < count; i++) {
+    const angle = (2 * Math.PI * i) / count;
+    const point = {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y,
+      z: center.z + Math.sin(angle) * radius,
+    };
+    try {
+      dimension.spawnParticle(particleId, point, molang);
+    } catch {
+      // A ring point landed in an unloaded chunk — skip just that one.
+    }
+  }
+}
+
+/**
+ * Spawns a short line of particles between two points — used for trail
+ * effects (e.g. a teleport's flight path).
+ * @param {import("@minecraft/server").Dimension} dimension
+ * @param {import("@minecraft/server").Vector3} from
+ * @param {import("@minecraft/server").Vector3} to
+ * @param {string} particleId
+ * @param {number} steps
+ * @param {{red:number, green:number, blue:number}} [color]
+ */
+export function spawnParticleTrail(dimension, from, to, particleId, steps, color) {
+  const molang = color ? buildColorMolang(color) : undefined;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const point = {
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+      z: from.z + (to.z - from.z) * t,
+    };
+    try {
+      dimension.spawnParticle(particleId, point, molang);
+    } catch {
+      // A trail point landed in an unloaded chunk — skip just that one.
+    }
+  }
 }
 
 /**
