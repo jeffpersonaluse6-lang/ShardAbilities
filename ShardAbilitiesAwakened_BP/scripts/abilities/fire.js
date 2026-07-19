@@ -5,9 +5,9 @@
  *   - Ignites every other entity within ~6 blocks for 4 seconds
  *   - Grants the caster Fire Resistance for 6 seconds (so they don't
  *     immediately catch themselves if standing in their own burst)
- *   - NEW: places a temporary lava block at the caster's feet, surrounded
- *     by a ring of fire blocks, both reverting to their original blocks
- *     after a few seconds
+ *   - FIXED: Now spawns lava and fire ring where the player is looking,
+ *     using a raycast to detect the targeted block (~12 blocks away).
+ *     If no block is hit, falls back to ~12 blocks in front of the player.
  *   - Cooldown (60s) handled by shardManager
  *
  * HONEST CAVEAT ON THE LAVA/FIRE RING: these are REAL blocks, not a
@@ -29,8 +29,62 @@ import { SHARDS } from "../config.js";
 const IGNITE_RADIUS = 6;
 const IGNITE_SECONDS = 4;
 const FIRE_RESISTANCE_DURATION_TICKS = 6 * 20; // 6 seconds
-const RING_RADIUS = 2;
+const RING_RADIUS = 3; // Larger ring around the lava center
 const LAVA_FIRE_DURATION_TICKS = 5 * 20; // 5 seconds, then reverts
+const RAYCAST_DISTANCE = 12; // Distance to look for target block
+
+/**
+ * Gets the target position where the player is looking using raycast.
+ * Falls back to a position ~12 blocks in front if no block is hit.
+ * @param {import("@minecraft/server").Player} player
+ * @returns {import("@minecraft/server").Vector3}
+ */
+function getTargetPosition(player) {
+  const viewDirection = player.getViewDirection();
+  const startPos = {
+    x: player.location.x,
+    y: player.location.y + player.height, // Start from eye level
+    z: player.location.z,
+  };
+
+  // Try to get the block the player is looking at
+  const blockRay = player.dimension.getBlockFromViewDirection({
+    ...startPos,
+    ...viewDirection,
+  }, RAYCAST_DISTANCE);
+
+  if (blockRay && blockRay.block) {
+    // Return the center of the targeted block face
+    const block = blockRay.block;
+    return {
+      x: block.x + 0.5,
+      y: block.y,
+      z: block.z + 0.5,
+    };
+  }
+
+  // Fallback: calculate position ~12 blocks in front of player
+  const horizontalLength = Math.sqrt(viewDirection.x * viewDirection.x + viewDirection.z * viewDirection.z);
+  if (horizontalLength === 0) {
+    // Looking straight up/down, just use position in front
+    return {
+      x: startPos.x,
+      y: startPos.y,
+      z: startPos.z + RAYCAST_DISTANCE,
+    };
+  }
+
+  const direction = {
+    x: viewDirection.x / horizontalLength,
+    z: viewDirection.z / horizontalLength,
+  };
+
+  return {
+    x: startPos.x + direction.x * RAYCAST_DISTANCE,
+    y: startPos.y,
+    z: startPos.z + direction.z * RAYCAST_DISTANCE,
+  };
+}
 
 /**
  * Places lava at the center and a ring of fire around it, remembering the
@@ -88,8 +142,10 @@ function executeEmberBurst(caster) {
     showParticles: false,
   });
 
+  const targetPosition = getTargetPosition(caster);
+
   const nearbyEntities = caster.dimension.getEntities({
-    location: caster.location,
+    location: targetPosition,
     maxDistance: IGNITE_RADIUS,
   });
 
@@ -100,14 +156,14 @@ function executeEmberBurst(caster) {
     if (wasIgnited) ignitedCount++;
   }
 
-  placeLavaFireRing(caster.dimension, caster.location);
+  placeLavaFireRing(caster.dimension, targetPosition);
 
-  spawnParticleRing(caster.dimension, caster.location, "minecraft:colored_flame_particle", RING_RADIUS, 12, {
+  spawnParticleRing(caster.dimension, targetPosition, "minecraft:colored_flame_particle", RING_RADIUS + 1, 12, {
     red: 0.95,
     green: 0.35,
     blue: 0.15,
   });
-  spawnAbilityParticle(caster, "minecraft:colored_flame_particle", undefined, {
+  spawnAbilityParticle(caster, "minecraft:colored_flame_particle", targetPosition, {
     red: 0.95,
     green: 0.35,
     blue: 0.15,
