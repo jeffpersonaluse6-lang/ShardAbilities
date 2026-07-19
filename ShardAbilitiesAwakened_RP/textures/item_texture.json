@@ -29,8 +29,8 @@
     "lightning_shard": {
       "textures": "textures/items/lightning_shard"
     },
-    "ice_shard": {
-      "textures": "textures/items/ice_shard"
+    "frost_shard": {
+      "textures": "textures/items/frost_shard"
     },
     "blood": {
       "textures": "textures/items/blood"

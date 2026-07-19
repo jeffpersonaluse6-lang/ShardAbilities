@@ -6,15 +6,43 @@
  *
  *   Combo resets if: no hit for 4 seconds, the player switches targets,
  *   or either the player or their target dies.
- * 
- *   SELF-CONTAINED: Uses only entityHitEntity event. Updates combo state
- *   and applies bonus damage immediately from the same event handler.
+ *
+ * WHY THIS FILE PLAYS TWO ROLES (hit passive AND damage-bonus provider):
+ * Tracking the combo (which target, how many hits, when was the last one)
+ * has to happen on entityHitEntity — that's the only event that fires
+ * every successful hit. But APPLYING the bonus has to happen through
+ * combatManager's damage-bonus resolution, so it can be compared against
+ * Rage's bonus and only the larger one wins, per your earlier call. So
+ * this file updates combo state in one handler and reports it in another
+ * — two small functions instead of one, because they're triggered by two
+ * different events for a reason, not by accident.
+ *
+ * A NOTE ON EVENT ORDERING (being upfront about an assumption I can't
+ * verify without live testing): this assumes entityHitEntity fires before
+ * entityHurt for the same swing, which is the commonly observed order in
+ * Bedrock and matches internal hit-detection-then-damage-application
+ * logic. If that assumption is ever wrong on some platform, the bonus
+ * would lag by one hit (using the previous hit's combo count instead of
+ * the current one) — a minor cosmetic inaccuracy, not a crash risk. If
+ * you notice combo damage feels "one hit behind" in testing, tell me and
+ * we'll revisit this.
+ *
+ * A NOTE ON "miss" AS A RESET CONDITION: Bedrock's Script API has no
+ * event for a swing that doesn't connect — entityHitEntity only fires on
+ * a successful hit. So "reset on miss" and "reset after 4 seconds with no
+ * hit" collapse into the same check here: a miss just means more time
+ * passes without a landed hit, which the 4-second timeout already covers.
  */
 
-import { world, system, EntityDamageCause } from "@minecraft/server";
+import { system } from "@minecraft/server";
+import {
+  registerHitPassive,
+  registerDamageBonusProvider,
+  registerLeaveCleanup,
+  registerDeathCleanup,
+} from "../managers/combatManager.js";
 import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.js";
 import { PASSIVE_ITEMS } from "../config.js";
-import { getOwnedPassiveIds } from "../managers/inventoryManager.js";
 
 const COMBO_TIMEOUT_TICKS = 4 * 20; // 4 seconds
 const PER_HIT_BONUS = 0.05; // +5% per combo stack
@@ -23,150 +51,61 @@ const MAX_BONUS = 0.25; // cap at hit 5+
 /** @type {Map<string, {targetId: string, count: number, lastHitTick: number}>} */
 const comboState = new Map();
 
+function currentBonusFor(state) {
+  return Math.min(MAX_BONUS, PER_HIT_BONUS * state.count);
+}
+
 /**
- * Called when a player with Momentum hits an entity.
- * Updates combo state and applies bonus damage immediately.
+ * Called on every hit landed by a player carrying Momentum. Updates combo
+ * state and gives the player action bar/particle/sound feedback.
  */
-function onHit(event) {
-  const attacker = event.damagingEntity;
-  const target = event.hitEntity;
-  
-  if (!attacker || attacker.typeId !== "minecraft:player" || !target) {
-    return;
-  }
-
-  // Check if attacker owns Momentum
-  const owned = getOwnedPassiveIds(attacker);
-  if (!owned.has(PASSIVE_ITEMS.momentum.id)) {
-    return;
-  }
-
+function onHit(attacker, target) {
   const now = system.currentTick;
-  const attackerId = attacker.id;
-  const targetId = target.id;
+  const existing = comboState.get(attacker.id);
 
-  // Get existing state for this attacker
-  let state = comboState.get(attackerId);
+  const isSameTarget = existing?.targetId === target.id;
+  const withinTimeout = existing ? now - existing.lastHitTick <= COMBO_TIMEOUT_TICKS : false;
+  const continuingCombo = isSameTarget && withinTimeout;
 
-  // Determine if we should reset the combo
-  let shouldReset = false;
+  const count = continuingCombo ? existing.count + 1 : 1;
+  const state = { targetId: target.id, count, lastHitTick: now };
+  comboState.set(attacker.id, state);
 
-  if (!state) {
-    // No existing state - start fresh
-    shouldReset = true;
-  } else if (state.targetId !== targetId) {
-    // Target changed - reset combo
-    shouldReset = true;
-  } else if (now - state.lastHitTick > COMBO_TIMEOUT_TICKS) {
-    // Timeout expired - reset combo
-    shouldReset = true;
-  }
-
-  // Update combo state
-  if (shouldReset) {
-    state = { targetId: targetId, count: 1, lastHitTick: now };
-  } else {
-    state.count++;
-    state.lastHitTick = now;
-  }
-
-  // Store updated state
-  comboState.set(attackerId, state);
-
-  // Calculate bonus percentage
-  const bonusPercent = Math.min(MAX_BONUS, PER_HIT_BONUS * state.count);
-  const bonusDisplay = Math.round(bonusPercent * 100);
-
-  // Display combo info
-  sendActionBar(attacker, `§6⚔ Combo x${state.count} (+${bonusDisplay}%)`);
+  const bonusPercent = Math.round(currentBonusFor(state) * 100);
+  sendActionBar(attacker, `§6⚔ Combo x${count} (+${bonusPercent}%)`);
   spawnAbilityParticle(attacker, "minecraft:colored_flame_particle", undefined, {
     red: 1.0,
     green: 0.7,
     blue: 0.1,
   });
-  playAbilitySound(attacker, "random.orb", { pitch: 1.0 + Math.min(state.count, 5) * 0.08 });
-
-  // Apply bonus damage immediately
-  // We need to calculate based on the vanilla damage that was just dealt
-  // Since we're in entityHitEntity, we don't have the exact damage value yet
-  // We'll apply a small extra damage based on a reasonable estimate
-  // The actual damage will be calculated when entityHurt fires, but we need
-  // to apply our bonus now. We'll use applyDamage which adds to the current health.
-  
-  // Get the base damage from the event if available, otherwise estimate
-  // Note: entityHitEntity doesn't provide damage directly, so we estimate
-  // based on typical player attack values. For accuracy, we read the 
-  // target's health before and after would require entityHurt, but since
-  // we need immediate application, we apply a fixed extra amount.
-  
-  // Actually, we need to wait for entityHurt to know the base damage.
-  // But the requirement says to apply immediately from entityHitEntity.
-  // The solution: store the pending bonus and apply it in entityHurt,
-  // OR estimate base damage from the player's equipped weapon.
-  
-  // For simplicity and reliability, let's estimate base damage from
-  // the player's main hand item. Vanilla Bedrock sword damages:
-  // wooden: 5, stone: 6, iron: 6, diamond: 7, netherite: 8
-  // Default punch (no weapon): 1
-  
-  const equipment = attacker.getComponent("minecraft:equippable");
-  let baseDamage = 1; // default punch
-  
-  if (equipment) {
-    const container = equipment.container;
-    if (container && container.size > 0) {
-      const mainHandItem = container.getItem(0); // Slot 0 is main hand
-      if (mainHandItem) {
-        const typeId = mainHandItem.typeId;
-        if (typeId.includes("wooden_sword")) baseDamage = 5;
-        else if (typeId.includes("stone_sword")) baseDamage = 6;
-        else if (typeId.includes("iron_sword")) baseDamage = 6;
-        else if (typeId.includes("golden_sword")) baseDamage = 6;
-        else if (typeId.includes("diamond_sword")) baseDamage = 7;
-        else if (typeId.includes("netherite_sword")) baseDamage = 8;
-        else if (typeId.includes("wooden_axe")) baseDamage = 6;
-        else if (typeId.includes("stone_axe")) baseDamage = 7;
-        else if (typeId.includes("iron_axe")) baseDamage = 7;
-        else if (typeId.includes("golden_axe")) baseDamage = 7;
-        else if (typeId.includes("diamond_axe")) baseDamage = 8;
-        else if (typeId.includes("netherite_axe")) baseDamage = 9;
-      }
-    }
-  }
-  
-  // Calculate and apply bonus damage
-  const bonusDamage = Math.max(1, Math.round(baseDamage * bonusPercent));
-  
-  // Apply the bonus damage immediately
-  try {
-    target.applyDamage(bonusDamage, {
-      cause: EntityDamageCause.entityAttack,
-      damagingEntity: attacker,
-    });
-  } catch (e) {
-    // Target may have died or become invalid - safe to ignore
-  }
+  // Pitch climbs slightly with combo count so higher stacks feel more intense.
+  playAbilitySound(attacker, "random.orb", { pitch: 1.0 + Math.min(count, 5) * 0.08 });
 }
 
-// Subscribe to entityHitEntity - the ONLY event used by Momentum
-world.afterEvents.entityHitEntity.subscribe(onHit);
+/**
+ * Reports Momentum's current bonus for THIS specific attacker/target pair
+ * — a combo built against one enemy doesn't apply to a hit on another.
+ */
+function getMomentumBonus(attacker, target) {
+  const state = comboState.get(attacker.id);
+  if (!state) return 0;
+  if (state.targetId !== target.id) return 0;
+  if (system.currentTick - state.lastHitTick > COMBO_TIMEOUT_TICKS) return 0;
+  return currentBonusFor(state);
+}
 
-// Cleanup on player leave
-world.afterEvents.playerLeave.subscribe((event) => {
-  comboState.delete(event.playerId);
-});
+registerHitPassive(PASSIVE_ITEMS.momentum.id, onHit);
+registerDamageBonusProvider("momentum", getMomentumBonus);
 
-// Cleanup on entity death (both attacker and target)
-world.afterEvents.entityDie.subscribe((event) => {
-  const deadId = event.deadEntity.id;
-  
-  // Remove any combo where this entity was the attacker
-  comboState.delete(deadId);
-  
-  // Remove any combo where this entity was the target
-  for (const [attackerId, state] of comboState.entries()) {
-    if (state.targetId === deadId) {
-      comboState.delete(attackerId);
-    }
+// Reset conditions: player leaves (their own combo is gone), player dies
+// (combo dies with them), OR the entity they were combo-ing dies (nothing
+// left to combo). Both hooked through combatManager's generic cleanup —
+// see the note in combatManager.js about why this is a separate mechanism
+// from the ownership-gated deathPassives map.
+registerLeaveCleanup((playerId) => comboState.delete(playerId));
+registerDeathCleanup((deadEntityId) => {
+  comboState.delete(deadEntityId); // the attacker died
+  for (const [attackerId, state] of comboState) {
+    if (state.targetId === deadEntityId) comboState.delete(attackerId); // their target died
   }
 });

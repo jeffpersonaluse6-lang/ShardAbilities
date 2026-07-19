@@ -22,12 +22,16 @@
  * more for player trust than technical elegance.
  */
 
+import { system } from "@minecraft/server";
 import { registerAbility } from "../managers/shardManager.js";
 import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.js";
 import { SHARDS } from "../config.js";
 
 const STRIKE_RANGE = 20;
 const SPEED_DURATION_TICKS = 4 * 20; // 4 seconds
+const RING_BOLT_COUNT = 8;
+const RING_RADIUS = 3;
+const RING_STAGGER_TICKS = 2; // small delay between each ring bolt for a cascading look
 
 /**
  * Determines the best available strike location using the fallback chain
@@ -67,12 +71,42 @@ function findStrikeLocation(caster) {
 }
 
 /**
+ * Spawns a ring of lightning bolts around a center point, staggered by a
+ * couple ticks each so it reads as a cascading circle rather than 8 bolts
+ * landing simultaneously in a static ring. Each bolt deals its own vanilla
+ * lightning damage/fire to anything caught underneath it — no separate
+ * damage scripting needed, that's free from the entity itself.
+ * @param {import("@minecraft/server").Dimension} dimension
+ * @param {import("@minecraft/server").Vector3} center
+ */
+function strikeRing(dimension, center) {
+  for (let i = 0; i < RING_BOLT_COUNT; i++) {
+    const angle = (2 * Math.PI * i) / RING_BOLT_COUNT;
+    const point = {
+      x: center.x + Math.cos(angle) * RING_RADIUS,
+      y: center.y,
+      z: center.z + Math.sin(angle) * RING_RADIUS,
+    };
+
+    system.runTimeout(() => {
+      try {
+        dimension.spawnEntity("minecraft:lightning_bolt", point);
+      } catch {
+        // Point may have become invalid (unloaded chunk) in the stagger
+        // delay — safe to skip that one bolt rather than fail the ring.
+      }
+    }, i * RING_STAGGER_TICKS);
+  }
+}
+
+/**
  * @param {import("@minecraft/server").Player} caster
  */
 function executeThunderclap(caster) {
   const strikeLocation = findStrikeLocation(caster);
 
   caster.dimension.spawnEntity("minecraft:lightning_bolt", strikeLocation);
+  strikeRing(caster.dimension, strikeLocation);
 
   caster.addEffect("speed", SPEED_DURATION_TICKS, {
     amplifier: 1,

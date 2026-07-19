@@ -22,8 +22,8 @@ import { sendActionBar, playAbilitySound, spawnAbilityParticle } from "../utils.
 import { SHARDS } from "../config.js";
 
 const WAVE_RADIUS = 5;
-const KNOCKBACK_HORIZONTAL_STRENGTH = 1.6;
-const KNOCKBACK_VERTICAL_STRENGTH = 0.3;
+const KNOCKBACK_HORIZONTAL_STRENGTH = 4.5; // was 1.6 — scaled up for a 10-20 block push
+const KNOCKBACK_VERTICAL_STRENGTH = 0.6; // was 0.3 — more hangtime carries the horizontal push further
 const WATER_BREATHING_DURATION_TICKS = 8 * 20; // 8 seconds
 
 /**

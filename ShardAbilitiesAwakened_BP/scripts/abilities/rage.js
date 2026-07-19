@@ -2,26 +2,29 @@
  * rage.js
  *
  * Rage Shard — "Berserk"
- *   - +35% melee damage for 10 seconds
+ *   - Strength III + Speed III for 10 seconds
+ *   - When the buff ends, the backlash hits: Poison
  *   - Cooldown (120s) handled by shardManager, as always.
  *
- * CHANGED from the standalone-addon version: this used to apply the
- * native Strength effect as a stable approximation of a damage boost,
- * specifically to avoid running its own entityHurt listener. Now that
- * combatManager owns a single, shared entityHurt listener for the whole
- * addon (see combatManager.js), that original concern doesn't apply —
- * the risk was never the event itself, it was having multiple independent
- * listeners stepping on each other. With one shared listener, Rage can
- * safely use the same real-percentage mechanism Momentum uses. This
- * matters concretely: "only the bigger of Rage/Momentum's bonus applies"
- * is meaningless unless both are the same kind of number. Strength I's
- * flat damage add and Momentum's percentage aren't comparable — so Rage
- * switching to a real percentage is what makes that rule possible at all.
+ * CHANGED AGAIN: this used to apply a scripted +35% damage bonus through
+ * combatManager's shared entityHurt listener (comparing against Momentum's
+ * combo bonus, taking whichever was larger). That mechanism turned out to
+ * be fragile in a way that had nothing to do with our code being wrong —
+ * Minecraft's own post-hit invulnerability window was silently absorbing
+ * bonus damage smaller than the hit that triggered it. Native status
+ * effects don't have that problem: they're applied directly by the
+ * engine's own effect system, not routed through the damage pipeline at
+ * all, so there's nothing for invulnerability frames to interfere with.
+ *
+ * This also means Rage no longer registers a damage-bonus provider with
+ * combatManager — Momentum is the only one left using that system now.
+ * That's fine; the provider system was built to let MULTIPLE sources
+ * resolve fairly against each other, and it still does exactly that for
+ * however many sources actually use it, one or several.
  */
 
 import { system } from "@minecraft/server";
 import { registerAbility } from "../managers/shardManager.js";
-import { registerDamageBonusProvider } from "../managers/combatManager.js";
 import {
   sendActionBar,
   playAbilitySound,
@@ -29,32 +32,25 @@ import {
 } from "../utils.js";
 import { SHARDS } from "../config.js";
 
-const BERSERK_DURATION_TICKS = 10 * 20; // 10 seconds
-const DAMAGE_BONUS = 0.35; // +35%
+const BUFF_DURATION_SECONDS = 10;
+const STRENGTH_AMPLIFIER = 2; // Strength III
+const SPEED_AMPLIFIER = 2; // Speed III
 
-/** @type {Map<string, number>} playerId -> tick when Berserk expires */
-const activeBerserkPlayers = new Map();
-
-/**
- * Reports Rage's current bonus to combatManager whenever it asks. Returns
- * 0 (meaning "not active") once Berserk's duration has passed — no timer
- * or cleanup needed beyond this check itself expiring naturally.
- * @param {import("@minecraft/server").Player} attacker
- * @returns {number}
- */
-function getRageBonus(attacker) {
-  const expiryTick = activeBerserkPlayers.get(attacker.id);
-  if (expiryTick === undefined) return 0;
-  return system.currentTick < expiryTick ? DAMAGE_BONUS : 0;
-}
-
-registerDamageBonusProvider("rage", getRageBonus);
+const POISON_DURATION_SECONDS = 4;
+const POISON_AMPLIFIER = 0; // Poison I
 
 /**
  * @param {import("@minecraft/server").Player} player
  */
 function executeBerserk(player) {
-  activeBerserkPlayers.set(player.id, system.currentTick + BERSERK_DURATION_TICKS);
+  player.addEffect("strength", BUFF_DURATION_SECONDS * 20, {
+    amplifier: STRENGTH_AMPLIFIER,
+    showParticles: true,
+  });
+  player.addEffect("speed", BUFF_DURATION_SECONDS * 20, {
+    amplifier: SPEED_AMPLIFIER,
+    showParticles: true,
+  });
 
   spawnAbilityParticle(player, "minecraft:colored_flame_particle", undefined, {
     red: 0.95,
@@ -62,7 +58,22 @@ function executeBerserk(player) {
     blue: 0.15,
   });
   playAbilitySound(player, "mob.ravager.roar", { pitch: 0.9 });
-  sendActionBar(player, "§cBerserk activated!");
+  sendActionBar(player, "§cBerserk activated! §7(the rage will cost you...)");
+
+  // Scheduled for exactly when the buff wears off. Wrapped in try/catch —
+  // the player may have logged off in the 10 seconds since activation,
+  // and addEffect on a stale/disconnected player reference would throw.
+  system.runTimeout(() => {
+    try {
+      player.addEffect("poison", POISON_DURATION_SECONDS * 20, {
+        amplifier: POISON_AMPLIFIER,
+        showParticles: true,
+      });
+      sendActionBar(player, "§2The rage fades... and poisons your blood.");
+    } catch {
+      // Player disconnected before the backlash landed — nothing to do.
+    }
+  }, BUFF_DURATION_SECONDS * 20);
 }
 
 registerAbility(SHARDS.rage.id, executeBerserk);

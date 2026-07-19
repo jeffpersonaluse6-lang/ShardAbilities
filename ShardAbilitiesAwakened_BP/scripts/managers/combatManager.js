@@ -29,6 +29,7 @@
 
 import { world, system, EntityDamageCause } from "@minecraft/server";
 import { getOwnedPassiveIds } from "./inventoryManager.js";
+import { DEBUG_MODE } from "../config.js";
 
 const TICKS_PER_SECOND = 20;
 const SOUL_FALLBACK_WINDOW_TICKS = 10 * TICKS_PER_SECOND; // matches original addon's 10s window
@@ -52,13 +53,6 @@ const leaveCleanupHooks = [];
  * regardless of killer — used by Momentum to clear combo state when a
  * target dies mid-combo, independent of who (or what) killed it. */
 const deathCleanupHooks = [];
-
-/** Entities currently receiving a deferred bonus-damage top-up. Prevents
- * the top-up's own applyDamage() call from re-triggering ANOTHER bonus
- * top-up on itself — see the entityHurt listener below for why this is
- * required now that bonuses have a guaranteed minimum (no longer relying
- * on rounding-to-zero to naturally stop the recursion). */
-const pendingBonusTargets = new Set();
 
 /** Tracks the last player who hit each player, as a PvP-kill-attribution
  * fallback — some server setups don't reliably populate
@@ -109,8 +103,6 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
   const target = event.hitEntity;
   if (!attacker || attacker.typeId !== "minecraft:player" || !target) return;
 
-  console.log(`[entityHitEntity] attacker=${attacker.id}, target=${target.id}`);
-
   // Soul's kill-attribution fallback needs this recorded unconditionally,
   // regardless of which passives either player owns.
   if (target.typeId === "minecraft:player" && target.id !== attacker.id) {
@@ -122,12 +114,8 @@ world.afterEvents.entityHitEntity.subscribe((event) => {
   // ONE inventory scan for this attacker, checked against every registered
   // hit passive — not one scan per passive.
   const owned = getOwnedPassiveIds(attacker);
-  console.log(`[entityHitEntity] owned passives: ${Array.from(owned).join(', ')}`);
   for (const [passiveId, handler] of hitPassives) {
-    if (owned.has(passiveId)) {
-      console.log(`[entityHitEntity] calling handler for '${passiveId}'`);
-      handler(attacker, target);
-    }
+    if (owned.has(passiveId)) handler(attacker, target);
   }
 });
 
@@ -178,80 +166,56 @@ system.runInterval(() => {
 // --- entityHurt: the single damage-bonus resolution point -----------------
 
 world.afterEvents.entityHurt.subscribe((event) => {
-  console.log(`[combatManager STAGE 3] entityHurt event fired`);
-  if (damageBonusProviders.size === 0) {
-    console.log(`[combatManager STAGE 3] NO damageBonusProviders registered`);
-    return;
-  }
-  console.log(`[combatManager STAGE 3] ${damageBonusProviders.size} providers registered`);
+  if (damageBonusProviders.size === 0) return;
 
   const { damageSource, hurtEntity, damage } = event;
-  console.log(`[combatManager STAGE 3] damage=${damage}, hurtEntity=${hurtEntity.id}`);
-
-  // This hit IS our own deferred top-up landing — do not compute another
-  // bonus on top of a bonus. Without this guard, the "minimum +1 damage"
-  // floor below would make the top-up recurse forever instead of stopping.
-  if (pendingBonusTargets.has(hurtEntity.id)) {
-    console.log(`[combatManager STAGE 3] SKIPPED - pendingBonusTargets has ${hurtEntity.id}`);
-    return;
-  }
 
   const attacker = damageSource.damagingEntity;
-  console.log(`[combatManager STAGE 3] attacker=${attacker?.id}, type=${attacker?.typeId}`);
-  if (!attacker || attacker.typeId !== "minecraft:player") {
-    console.log(`[combatManager STAGE 3] SKIPPED - attacker not player`);
-    return;
-  }
-  console.log(`[combatManager STAGE 3] cause=${damageSource.cause}, expected=${EntityDamageCause.entityAttack}`);
-  if (damageSource.cause !== EntityDamageCause.entityAttack) {
-    console.log(`[combatManager STAGE 3] SKIPPED - wrong damage cause`);
-    return;
-  }
+  if (!attacker || attacker.typeId !== "minecraft:player") return;
+  if (damageSource.cause !== EntityDamageCause.entityAttack) return;
 
   let bestBonus = 0;
-  console.log(`[combatManager STAGE 3] iterating ${damageBonusProviders.size} providers`);
-  for (const [sourceId, provider] of damageBonusProviders) {
-    console.log(`[combatManager STAGE 3] calling provider '${sourceId}' with attacker=${attacker.id}, hurtEntity=${hurtEntity.id}`);
+  for (const provider of damageBonusProviders.values()) {
     const bonus = provider(attacker, hurtEntity, damage);
-    console.log(`[combatManager STAGE 3] provider '${sourceId}' returned bonus=${bonus}, bestBonus was ${bestBonus}`);
     if (bonus > bestBonus) bestBonus = bonus;
   }
-  console.log(`[combatManager STAGE 3] final bestBonus=${bestBonus}, damage=${damage}`);
-  if (bestBonus <= 0) {
-    console.log(`[combatManager STAGE 3] NO BONUS APPLIED (bestBonus <= 0)`);
-    return;
+
+  if (DEBUG_MODE) {
+    attacker.sendMessage(
+      `§b[debug] providers=${damageBonusProviders.size}, bestBonus=${bestBonus}`
+    );
   }
+
+  if (bestBonus <= 0) return;
 
   // Guarantee at least +1 whenever any bonus is active — see rage.js /
   // this file's history for why rounding alone left small bonuses
   // (particularly Momentum's early combo stacks) completely invisible.
   const bonusDamage = Math.max(1, Math.round(damage * bestBonus));
-  console.log(`[combatManager STAGE 4] baseDamage=${damage}, bestBonus=${bestBonus}, bonusDamage=${bonusDamage}`);
 
-  // Deferred one tick to avoid Bedrock's execution-context restrictions on
-  // mutating combat state from inside the event that's still resolving it.
-  pendingBonusTargets.add(hurtEntity.id);
-  
-  // Read health before applying damage (Stage 7 prep)
-  const healthBefore = hurtEntity.getComponent("minecraft:health")?.currentValue;
-  console.log(`[combatManager STAGE 5] health before=${healthBefore}, calling applyDamage(${bonusDamage})`);
-  
-  system.run(() => {
-    try {
-      hurtEntity.applyDamage(bonusDamage, {
-        cause: EntityDamageCause.entityAttack,
-        damagingEntity: attacker,
-      });
-      console.log(`[combatManager STAGE 6] applyDamage SUCCESS applied ${bonusDamage} to ${hurtEntity.id}`);
-    } catch (e) {
-      // Target likely died/despawned in the 1-tick gap — safe to skip.
-      console.log(`[combatManager STAGE 6] applyDamage FAILED - error: ${e.message}`);
-    } finally {
-      pendingBonusTargets.delete(hurtEntity.id);
-      
-      // Stage 7: Read health after applying damage
-      const healthAfter = hurtEntity.getComponent("minecraft:health")?.currentValue;
-      console.log(`[combatManager STAGE 7] health after=${healthAfter}, health before was=${healthBefore}, delta=${healthBefore !== undefined && healthAfter !== undefined ? (healthBefore - healthAfter) : 'unknown'}`);
+  if (DEBUG_MODE) {
+    attacker.sendMessage(`§b[debug] applying bonusDamage=${bonusDamage} (base=${damage}, bonus=${bestBonus})`);
+  }
+
+  // FIX: applyDamage() routes through Minecraft's normal damage pipeline —
+  // including a brief post-hit invulnerability window where a SMALLER
+  // follow-up damage instance is silently absorbed entirely (the call
+  // still reports success; it just does nothing). Our bonus is always
+  // smaller than the base hit that triggered it, so it was getting eaten
+  // by this every single time. Directly reducing the health component
+  // bypasses the damage pipeline (invulnerability, armor, resistance
+  // effects) entirely — the bonus can't be silently discarded this way.
+  // Trade-off: the target won't flash red / play a hurt sound for this
+  // specific portion of damage, since that's tied to the damage event we're
+  // deliberately not triggering. Worth it for the bonus actually landing.
+  try {
+    const health = hurtEntity.getComponent("minecraft:health");
+    if (health) {
+      const newValue = Math.max(0, health.currentValue - bonusDamage);
+      health.setCurrentValue(newValue);
+      if (DEBUG_MODE) attacker.sendMessage(`§b[debug] health reduced to ${newValue}`);
     }
-  });
+  } catch (e) {
+    if (DEBUG_MODE) attacker.sendMessage(`§c[debug] health reduction FAILED: ${e.message}`);
+  }
 });

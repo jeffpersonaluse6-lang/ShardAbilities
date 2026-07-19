@@ -21,6 +21,14 @@
  * stable docs. Treating "not air" as "not safe" is slightly more
  * conservative (won't blink through things like open trapdoors) but keeps
  * this ability built entirely on stable API surface.
+ *
+ * FIX: "not air" was too conservative in one real way — short grass, tall
+ * grass, ferns, flowers, and similar plants aren't air, but they're
+ * completely walkable. The original isAir-only check stopped the blink
+ * dead at ANY patch of grass, which is why looking straight ahead over
+ * grass cut the distance short while looking upward (over the grass
+ * layer) worked fine. PASSABLE_BLOCK_IDS is an explicit allowlist of
+ * common walkable-but-not-air blocks, checked alongside isAir.
  */
 
 import { registerAbility } from "../managers/shardManager.js";
@@ -33,6 +41,43 @@ import { SHARDS } from "../config.js";
 
 const MAX_BLINK_DISTANCE = 20;
 const STEP_SIZE = 1;
+
+// Common walkable plant/decoration blocks that aren't air but don't
+// obstruct movement. Easy to extend if another passable block gets
+// reported as blocking a blink.
+const PASSABLE_BLOCK_IDS = new Set([
+  "minecraft:short_grass",
+  "minecraft:tallgrass",
+  "minecraft:tall_grass",
+  "minecraft:fern",
+  "minecraft:large_fern",
+  "minecraft:seagrass",
+  "minecraft:tall_seagrass",
+  "minecraft:dead_bush",
+  "minecraft:vine",
+  "minecraft:snow_layer",
+  "minecraft:torch",
+  "minecraft:soul_torch",
+  "minecraft:redstone_wire",
+  "minecraft:wheat",
+  "minecraft:carrots",
+  "minecraft:potatoes",
+  "minecraft:beetroot",
+  "minecraft:sapling",
+  "minecraft:red_flower",
+  "minecraft:yellow_flower",
+  "minecraft:crimson_roots",
+  "minecraft:warped_roots",
+  "minecraft:nether_sprouts",
+]);
+
+/**
+ * @param {import("@minecraft/server").Block} block
+ * @returns {boolean}
+ */
+function isPassable(block) {
+  return block.isAir || PASSABLE_BLOCK_IDS.has(block.typeId);
+}
 
 /**
  * Finds the furthest safe point along the player's view direction.
@@ -60,7 +105,7 @@ function findSafeBlinkLocation(player) {
     // somewhere we can't verify is safe.
     if (!feetBlock || !headBlock) break;
 
-    if (!feetBlock.isAir || !headBlock.isAir) break; // Obstruction found — stop here.
+    if (!isPassable(feetBlock) || !isPassable(headBlock)) break; // Obstruction found — stop here.
 
     safeLocation = point;
   }

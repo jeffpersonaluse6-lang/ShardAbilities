@@ -20,7 +20,7 @@ export const NAMESPACE = "shard";
  * message on every single player-caused hit, which is real per-event
  * overhead this addon otherwise goes out of its way to avoid.
  */
-export const DEBUG_MODE = true;
+export const DEBUG_MODE = false;
 
 /**
  * @typedef {Object} ShardDefinition
@@ -86,11 +86,11 @@ export const SHARDS = {
     cooldownSeconds: 75,
     displayName: "Lightning Shard",
   },
-  ice: {
-    id: "ice",
-    itemId: `${NAMESPACE}:ice_shard`,
+  frost: {
+    id: "frost",
+    itemId: `${NAMESPACE}:frost_shard`,
     cooldownSeconds: 50,
-    displayName: "Ice Shard",
+    displayName: "Frost Shard",
   },
 };
 

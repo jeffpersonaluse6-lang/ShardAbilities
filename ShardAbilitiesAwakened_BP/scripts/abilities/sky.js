@@ -2,15 +2,11 @@
  * sky.js
  *
  * Sky Shard — "Sky Leap"
- *   - Launches the player upward
- *   - Applies Slow Falling for 8 seconds (so the landing doesn't hurt)
+ *   - Launches the player upward, higher than before
+ *   - No Slow Falling anymore — landing damage is a real risk now,
+ *     matching the requested "remove the safety net" change.
  *   - Cooldown (30s) handled by shardManager — shortest cooldown in the
  *     addon, matching its Uncommon rarity and low commitment/impact.
- *
- * Order matters here: we apply Slow Falling BEFORE the upward knockback.
- * If we launched first, there'd be a brief window (before the effect
- * packet reaches the client/simulation) where the player is airborne
- * without the effect active. Applying the effect first removes that gap.
  */
 
 import { registerAbility } from "../managers/shardManager.js";
@@ -21,15 +17,9 @@ import {
 } from "../utils.js";
 import { SHARDS } from "../config.js";
 
-const SLOW_FALLING_DURATION_TICKS = 8 * 20; // 8 seconds
-const LAUNCH_VERTICAL_STRENGTH = 1.4;
+const LAUNCH_VERTICAL_STRENGTH = 2.0; // was 1.4 — noticeably higher arc
 
 function executeSkyLeap(player) {
-  player.addEffect("slow_falling", SLOW_FALLING_DURATION_TICKS, {
-    amplifier: 0,
-    showParticles: true,
-  });
-
   // No horizontal force — Sky Leap is a vertical launch, not a dash.
   player.applyKnockback({ x: 0, z: 0 }, LAUNCH_VERTICAL_STRENGTH);
 

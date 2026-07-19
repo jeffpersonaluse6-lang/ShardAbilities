@@ -28,7 +28,7 @@ import "./abilities/vision.js";
 import "./abilities/fire.js";
 import "./abilities/water.js";
 import "./abilities/lightning.js";
-import "./abilities/ice.js";
+import "./abilities/frost.js";
 
 // --- Passive imports (just-carry-it-in-inventory items) -------------------
 // Each import runs that file's top-level registration with combatManager
