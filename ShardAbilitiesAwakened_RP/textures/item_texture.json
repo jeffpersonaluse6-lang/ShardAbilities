@@ -20,8 +20,8 @@
     "vision_shard": {
       "textures": "textures/items/vision_shard"
     },
-    "fire_shard": {
-      "textures": "textures/items/fire_shard"
+    "flash_shard": {
+      "textures": "textures/items/flash_shard"
     },
     "water_shard": {
       "textures": "textures/items/water_shard"
@@ -34,6 +34,9 @@
     },
     "momentum": {
       "textures": "textures/items/momentum"
+    },
+    "kinetic_core": {
+      "textures": "textures/items/kinetic_core"
     }
   }
 }

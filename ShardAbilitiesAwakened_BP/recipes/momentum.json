@@ -1,0 +1,25 @@
+{
+  "format_version": "1.12",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "invfx:momentum"
+    },
+    "tags": ["crafting_table"],
+    "pattern": [
+      "BNZ",
+      "EKE",
+      "ZNB"
+    ],
+    "key": {
+      "B": { "item": "minecraft:blaze_rod" },
+      "N": { "item": "minecraft:netherite_ingot" },
+      "Z": { "item": "minecraft:breeze_rod" },
+      "E": { "item": "minecraft:echo_shard" },
+      "K": { "item": "invfx:kinetic_core" }
+    },
+    "result": {
+      "item": "invfx:momentum",
+      "count": 1
+    }
+  }
+}

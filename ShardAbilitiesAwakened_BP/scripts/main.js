@@ -24,7 +24,7 @@ import "./abilities/ender.js";
 import "./abilities/shadow.js";
 import "./abilities/sky.js";
 import "./abilities/vision.js";
-import "./abilities/fire.js";
+import "./abilities/flash.js";
 import "./abilities/water.js";
 import "./abilities/lightning.js";
 import "./abilities/frost.js";

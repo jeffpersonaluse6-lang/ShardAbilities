@@ -68,11 +68,11 @@ export const SHARDS = {
     cooldownSeconds: 45,
     displayName: "Vision Shard",
   },
-  fire: {
-    id: "fire",
-    itemId: `${NAMESPACE}:fire_shard`,
+  flash: {
+    id: "flash",
+    itemId: `${NAMESPACE}:flash_shard`,
     cooldownSeconds: 60,
-    displayName: "Fire Shard",
+    displayName: "Flash Shard",
   },
   water: {
     id: "water",

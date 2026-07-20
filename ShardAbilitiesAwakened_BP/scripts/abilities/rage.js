@@ -2,8 +2,8 @@
  * rage.js
  *
  * Rage Shard — "Berserk"
- *   - Strength III + Speed III for 10 seconds
- *   - When the buff ends, the backlash hits: Poison
+ *   - Strength III for 10 seconds (Speed removed per balance pass)
+ *   - When the buff ends, the backlash hits: Poison for 7 seconds
  *   - Cooldown (120s) handled by shardManager, as always.
  *
  * Uses native status effects rather than a scripted damage-percentage
@@ -28,9 +28,8 @@ import { SHARDS } from "../config.js";
 
 const BUFF_DURATION_SECONDS = 10;
 const STRENGTH_AMPLIFIER = 2; // Strength III
-const SPEED_AMPLIFIER = 2; // Speed III
 
-const POISON_DURATION_SECONDS = 4;
+const POISON_DURATION_SECONDS = 7;
 const POISON_AMPLIFIER = 0; // Poison I
 
 /**
@@ -39,10 +38,6 @@ const POISON_AMPLIFIER = 0; // Poison I
 function executeBerserk(player) {
   player.addEffect("strength", BUFF_DURATION_SECONDS * 20, {
     amplifier: STRENGTH_AMPLIFIER,
-    showParticles: true,
-  });
-  player.addEffect("speed", BUFF_DURATION_SECONDS * 20, {
-    amplifier: SPEED_AMPLIFIER,
     showParticles: true,
   });
 
